@@ -1,0 +1,6 @@
+{
+  "allowedDomains": ["127.0.0.1", "localhost"],
+  "colorScheme": "dark",
+  "headed": false,
+  "engine": "chrome"
+}
