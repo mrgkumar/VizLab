@@ -279,7 +279,11 @@ export default function SolenoidVisualization() {
     }
 
     function defaultView() {
-      setView(new THREE.Vector3(7.4, -8.2, 4.8), new THREE.Vector3(0, 0, 0));
+      setView(new THREE.Vector3(6.4, -7.0, 4.2), new THREE.Vector3(0, 0, 0));
+    }
+
+    function solenoidTeachingView() {
+      setView(new THREE.Vector3(9.2, -10.4, 6.4), new THREE.Vector3(0, 0, 0));
     }
 
     function sideView() {
@@ -515,6 +519,8 @@ export default function SolenoidVisualization() {
         };
         setMessage(messages[v]);
         rebuildCoil();
+        if (v === 1) defaultView();
+        if (v > 1) solenoidTeachingView();
       },
       setCurrentA(v) {
         state.currentA = v;
@@ -626,7 +632,7 @@ export default function SolenoidVisualization() {
       state.phi += state.vPhi;
       state.dist += state.vZoom;
       state.phi = clamp(state.phi, 0.15, Math.PI - 0.15);
-      state.dist = clamp(state.dist, 4.8, 18);
+      state.dist = clamp(state.dist, 3.8, 18);
       state.vTheta *= 0.9;
       state.vPhi *= 0.9;
       state.vZoom *= 0.84;
@@ -729,13 +735,6 @@ export default function SolenoidVisualization() {
     "Reverse the current and the thumb flips, so B reverses too.",
   ];
 
-  const teacherPrimer = [
-    "Red arrows show conventional current I along the wire path.",
-    "Cyan arrows show the magnetic field B sampled at points in space.",
-    "Orange shows the local probe field; amber dashed shows the long-solenoid guide B ≈ μ0 n I.",
-    "The violet plane is a moving cross-section tied to the probe position.",
-  ];
-
   const modelAssumptions = [
     "This is a finite wire model, not an infinite ideal solenoid.",
     "The plot shows Bz on the solenoid axis, not the full 3D field everywhere.",
@@ -752,12 +751,30 @@ export default function SolenoidVisualization() {
         ? "border-cyan-200 bg-cyan-300 text-slate-950 shadow-cyan-300/30"
         : "border-slate-500 bg-slate-800/95 text-slate-100 hover:border-cyan-200 hover:bg-slate-700"
     }`;
+  const compactLegendItems = legendItems.filter((item) => {
+    if (item.title === "Orange arrow") return step >= 3;
+    if (item.title === "Amber dashed line") return step >= 4;
+    if (item.title === "Violet plane") return step >= 2;
+    return true;
+  });
+  const resetAll = () => {
+    setStep(1);
+    setCurrentA(6);
+    setTurns(14);
+    setLengthCm(18);
+    setRadiusCm(4);
+    setProbeFrac(0);
+    setCurrentDir(1);
+    setShowIdeal(true);
+    setLabelScale(1);
+    appRef.current?.reset();
+  };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 p-4 text-white">
+    <div className="min-h-screen w-full bg-[radial-gradient(circle_at_20%_0%,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_78%_12%,rgba(217,70,239,0.12),transparent_28%),#020617] p-3 text-white sm:p-4">
       <div className="mx-auto max-w-7xl space-y-4">
-        <header className="space-y-3">
-          <div>
+        <header className="flex flex-col gap-3 rounded-3xl border border-slate-700/80 bg-slate-950/75 p-4 shadow-2xl backdrop-blur md:flex-row md:items-end md:justify-between">
+          <div className="max-w-4xl">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">VizLab</div>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">Solenoid Field Lab</h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">
@@ -765,184 +782,189 @@ export default function SolenoidVisualization() {
               field inside and a weaker return field outside.
             </p>
           </div>
-
-          <div className="rounded-2xl border border-slate-700 bg-slate-900/95 text-white shadow-soft">
-            <div className="p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                  <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Step {step}</div>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-tight">{stepTitle}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{stepHint}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Focus: {focus}</p>
-                </div>
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  {[1, 2, 3, 4].map((s) => (
-                    <button key={s} className={stepBtn(step === s)} onClick={() => setStep(s)}>
-                      {s}
-                    </button>
-                  ))}
-                  <button className={btn(currentDir < 0)} onClick={() => setCurrentDir((v) => -v)}>
-                    <ArrowRightLeft className="mr-2 inline h-4 w-4" />
-                    Reverse current
-                  </button>
-                  <button
-                    className={btn(false)}
-                    onClick={() => {
-                      setStep(1);
-                      setCurrentA(6);
-                      setTurns(14);
-                      setLengthCm(18);
-                      setRadiusCm(4);
-                      setProbeFrac(0);
-                      setCurrentDir(1);
-                      setShowIdeal(true);
-                      setLabelScale(1);
-                      appRef.current?.reset();
-                    }}
-                  >
-                    <RotateCcw className="mr-2 inline h-4 w-4" />
-                    Reset
-                  </button>
-                </div>
-              </div>
+          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 p-3 text-center sm:min-w-[360px]">
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">B center</div>
+              <div className="mt-1 text-lg font-semibold text-cyan-100">{fmt(centerB * 1000, 3)} mT</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">μ0 n I</div>
+              <div className="mt-1 text-lg font-semibold text-amber-100">{fmt(idealB * 1000, 3)} mT</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Error</div>
+              <div className="mt-1 text-lg font-semibold text-rose-100">{fmt(centerError, 1)}%</div>
             </div>
           </div>
         </header>
 
-        <div className="relative overflow-hidden rounded-3xl border border-slate-700 bg-black shadow-2xl" style={{ height: "72vh" }}>
+        <div className="relative overflow-hidden rounded-[2rem] border border-cyan-500/20 bg-black shadow-2xl" style={{ height: "min(78vh, 820px)", minHeight: "620px" }}>
           <div ref={mountRef} className="absolute inset-0" />
-        </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-white">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-cyan-100">Read this first</div>
-              <div className="text-xs uppercase tracking-[0.2em] text-cyan-200/70">Teacher primer</div>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {teacherPrimer.map((item) => (
-                <div key={item} className="rounded-2xl border border-cyan-500/20 bg-slate-950/80 p-4 text-sm leading-6 text-slate-200">
-                  {item}
+          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between gap-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="pointer-events-auto max-w-lg rounded-3xl border border-white/10 bg-slate-950/78 p-4 shadow-2xl backdrop-blur-md">
+                <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Step {step}</div>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">{stepTitle}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-200">{stepHint}</p>
+                <p className="mt-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-sm leading-6 text-cyan-50">
+                  Focus: {focus}
+                </p>
+                {message && <p className="mt-2 text-xs leading-5 text-slate-400">{message}</p>}
+              </div>
+
+              <div className="pointer-events-auto rounded-3xl border border-white/10 bg-slate-950/82 p-3 shadow-2xl backdrop-blur-md lg:w-[420px]">
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4].map((s) => (
+                    <button key={s} className={stepBtn(step === s)} onClick={() => setStep(s)} aria-label={`Show step ${s}`}>
+                      {s}
+                    </button>
+                  ))}
                 </div>
-              ))}
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button className={btn(currentDir < 0)} onClick={() => setCurrentDir((v) => -v)}>
+                    <ArrowRightLeft className="mr-2 inline h-4 w-4" />
+                    Reverse current
+                  </button>
+                  <button className={btn(false)} onClick={resetAll}>
+                    <RotateCcw className="mr-2 inline h-4 w-4" />
+                    Reset
+                  </button>
+                </div>
+                <div className="mt-3">
+                  <label className="mb-1 flex justify-between text-sm font-medium text-cyan-100">
+                    <span>Slice / probe position</span>
+                    <span>{fmt(probeFrac, 2)}</span>
+                  </label>
+                  <input
+                    className="w-full accent-cyan-400"
+                    type="range"
+                    min="-0.92"
+                    max="0.92"
+                    step="0.01"
+                    value={probeFrac}
+                    onChange={(e) => setProbeFrac(Number(e.target.value))}
+                  />
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <button className={btn(false)} onClick={() => appRef.current?.view("default")}>Default</button>
+                  <button className={btn(false)} onClick={() => appRef.current?.view("side")}>Side</button>
+                  <button className={btn(false)} onClick={() => appRef.current?.view("end")}>End-on</button>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-5 text-white">
-            <div className="text-sm font-semibold text-slate-100">Model assumptions</div>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-              {modelAssumptions.map((item) => (
-                <li key={item} className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <div className="pointer-events-auto grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl backdrop-blur-md">
+                <div className="flex flex-wrap gap-2">
+                  {compactLegendItems.map((item) => (
+                    <div key={item.title} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs text-slate-200">
+                      <span className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
+                      <span className="font-semibold text-slate-100">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs leading-5 text-slate-400">Drag to rotate. Shift+drag to pan. Scroll to zoom. Double-click to reset view.</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl backdrop-blur-md">
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-2xl bg-slate-900 p-3">
+                    <div className="uppercase tracking-[0.16em] text-slate-500">Turns</div>
+                    <div className="mt-1 text-base font-semibold text-slate-100">{turns}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-900 p-3">
+                    <div className="uppercase tracking-[0.16em] text-slate-500">Length</div>
+                    <div className="mt-1 text-base font-semibold text-slate-100">{lengthCm} cm</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-900 p-3">
+                    <div className="uppercase tracking-[0.16em] text-slate-500">n</div>
+                    <div className="mt-1 text-base font-semibold text-slate-100">{fmt(turnsPerM, 0)}/m</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-5 text-white">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)]">
+          <div className="rounded-3xl border border-slate-700 bg-slate-900/90 p-5 text-white shadow-2xl">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-slate-100">Legend</div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">How to read the scene</div>
+              <div className="text-sm font-semibold text-slate-100">Current values</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Finite model</div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {legendItems.map((item) => (
-                <div key={item.title} className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  <div className="flex items-center gap-3">
-                    <span className={`h-3 w-3 rounded-full ${item.color}`} />
-                    <div className="font-semibold text-slate-100">{item.title}</div>
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{item.body}</p>
-                </div>
-              ))}
+              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Center field</div>
+                <div className="mt-2 text-2xl font-semibold text-cyan-100">{fmt(centerB * 1000, 3)} mT</div>
+                <div className="mt-1 text-sm text-slate-400">Numerical finite-coil sum at z = 0</div>
+              </div>
+              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Probe field</div>
+                <div className="mt-2 text-2xl font-semibold text-amber-100">{fmt(fieldData.probeMag * 1000, 3)} mT</div>
+                <div className="mt-1 text-sm text-slate-400">Magnitude at the slice/probe plane</div>
+              </div>
+              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Long-solenoid guide</div>
+                <div className="mt-2 text-xl font-semibold text-amber-100">{fmt(idealB * 1000, 3)} mT</div>
+                <div className="mt-1 text-sm text-slate-400">B ≈ μ0 n I</div>
+              </div>
+              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Center error</div>
+                <div className="mt-2 text-xl font-semibold text-rose-100">{fmt(centerError, 1)}%</div>
+                <div className="mt-1 text-sm text-slate-400">Finite coil vs guide</div>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-5 text-white">
-            <div className="text-sm font-semibold text-slate-100">Right-hand rule</div>
-            <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-              {rhsSteps.map((stepText, index) => (
-                <li key={stepText} className="flex gap-3 rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-bold text-cyan-200">
-                    {index + 1}
-                  </div>
-                  <span>{stepText}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-
-        <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 text-white">
-          <div className="space-y-4 p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="text-sm font-semibold text-slate-100">Controls</div>
-              <div className="text-xs text-slate-400">Drag to rotate, right-drag or Shift+drag to pan, scroll to zoom</div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
+          <details className="rounded-3xl border border-slate-700 bg-slate-900/90 p-5 text-white shadow-2xl" open>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-100">Teacher notes, legend, and accuracy checks</summary>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
-                <label className="mb-1 flex justify-between text-sm font-medium text-cyan-100">
-                  <span>Probe position on axis</span>
-                  <span>{fmt(probeFrac, 2)}</span>
-                </label>
-                <input
-                  className="w-full accent-cyan-400"
-                  type="range"
-                  min="-0.92"
-                  max="0.92"
-                  step="0.01"
-                  value={probeFrac}
-                  onChange={(e) => setProbeFrac(Number(e.target.value))}
-                />
-                <p className="mt-1 text-xs text-slate-400">Only used in steps 3 and 4.</p>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Scene legend</div>
+                <div className="mt-3 grid gap-3">
+                  {legendItems.map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`h-3 w-3 rounded-full ${item.color}`} />
+                        <div className="font-semibold text-slate-100">{item.title}</div>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{item.body}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              <div className="grid gap-2 sm:grid-cols-3">
-                <button className={btn(false)} onClick={() => appRef.current?.view("default")}>Default view</button>
-                <button className={btn(false)} onClick={() => appRef.current?.view("side")}>Side view</button>
-                <button className={btn(false)} onClick={() => appRef.current?.view("end")}>End-on view</button>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Right-hand rule</div>
+                  <ol className="mt-3 space-y-3 text-sm leading-6 text-slate-300">
+                    {rhsSteps.map((stepText, index) => (
+                      <li key={stepText} className="flex gap-3 rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-bold text-cyan-200">
+                          {index + 1}
+                        </div>
+                        <span>{stepText}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Model assumptions</div>
+                  <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-300">
+                    {modelAssumptions.map((item) => (
+                      <li key={item} className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
-
-            <details className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-100">Advanced geometry</summary>
-              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Current</span><span>{fmt(currentA, 1)} A</span></label>
-                  <input className="w-full accent-cyan-400" type="range" min="0.5" max="18" step="0.1" value={currentA} onChange={(e) => setCurrentA(Number(e.target.value))} />
-                </div>
-                <div>
-                  <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Turns</span><span>{turns}</span></label>
-                  <input className="w-full accent-cyan-400" type="range" min="4" max="28" step="1" value={turns} onChange={(e) => setTurns(Number(e.target.value))} />
-                </div>
-                <div>
-                  <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Length</span><span>{lengthCm} cm</span></label>
-                  <input className="w-full accent-cyan-400" type="range" min="10" max="30" step="1" value={lengthCm} onChange={(e) => setLengthCm(Number(e.target.value))} />
-                </div>
-                <div>
-                  <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Radius</span><span>{radiusCm} cm</span></label>
-                  <input className="w-full accent-cyan-400" type="range" min="2" max="8" step="0.1" value={radiusCm} onChange={(e) => setRadiusCm(Number(e.target.value))} />
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button className={btn(showIdeal)} onClick={() => setShowIdeal((v) => !v)}>
-                  {showIdeal ? "Hide ideal guide" : "Show ideal guide"}
-                </button>
-                <div className="ml-auto flex items-center gap-2">
-                  <button className={btn(false)} onClick={() => setLabelScale((v) => Math.max(0.6, v - 0.1))}>Text−</button>
-                  <button className={btn(false)} onClick={() => setLabelScale((v) => Math.min(1.7, v + 0.1))}>Text+</button>
-                </div>
-              </div>
-            </details>
-          </div>
+          </details>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 text-white">
-            <div className="p-5">
+        <div className="rounded-3xl border border-slate-700 bg-slate-900/90 text-white shadow-2xl">
+          <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+            <div>
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-slate-100">What to notice</div>
                 <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Biot-Savart sum</div>
@@ -965,7 +987,40 @@ export default function SolenoidVisualization() {
                 The dashed guide is the long-solenoid approximation, useful near the center but not exact at the ends. It uses n = N/L in the
                 formula B ≈ μ0 n I.
               </p>
-              <details className="mt-4 rounded-2xl border border-slate-700 bg-slate-950 p-4">
+            </div>
+
+            <div className="space-y-4">
+              <details className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-100">Advanced geometry</summary>
+                <div className="mt-4 grid gap-4">
+                  <div>
+                    <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Current</span><span>{fmt(currentA, 1)} A</span></label>
+                    <input className="w-full accent-cyan-400" type="range" min="0.5" max="18" step="0.1" value={currentA} onChange={(e) => setCurrentA(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Turns</span><span>{turns}</span></label>
+                    <input className="w-full accent-cyan-400" type="range" min="4" max="28" step="1" value={turns} onChange={(e) => setTurns(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Length</span><span>{lengthCm} cm</span></label>
+                    <input className="w-full accent-cyan-400" type="range" min="10" max="30" step="1" value={lengthCm} onChange={(e) => setLengthCm(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Radius</span><span>{radiusCm} cm</span></label>
+                    <input className="w-full accent-cyan-400" type="range" min="2" max="8" step="0.1" value={radiusCm} onChange={(e) => setRadiusCm(Number(e.target.value))} />
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button className={btn(showIdeal)} onClick={() => setShowIdeal((v) => !v)}>
+                    {showIdeal ? "Hide ideal guide" : "Show ideal guide"}
+                  </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    <button className={btn(false)} onClick={() => setLabelScale((v) => Math.max(0.6, v - 0.1))}>Text−</button>
+                    <button className={btn(false)} onClick={() => setLabelScale((v) => Math.min(1.7, v + 0.1))}>Text+</button>
+                  </div>
+                </div>
+              </details>
+              <details className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-slate-100">Accuracy notes</summary>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
                   <li>The outside field is weaker, not zero. Zero outside is only the ideal long-solenoid approximation.</li>
@@ -973,45 +1028,6 @@ export default function SolenoidVisualization() {
                   <li>Reversing the current flips the field direction by the right-hand rule.</li>
                 </ul>
               </details>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 text-white">
-            <div className="p-5">
-              <div className="text-sm font-semibold text-slate-100">Current values</div>
-              <div className="mt-3 rounded-2xl border border-slate-700 bg-slate-950 p-4 text-sm leading-6 text-slate-300">
-                <div className="font-semibold text-slate-100">Symbols</div>
-                <div className="mt-2 grid gap-1">
-                  <div><span className="text-cyan-300">I</span> = current in amperes</div>
-                  <div><span className="text-cyan-300">N</span> = number of turns</div>
-                  <div><span className="text-cyan-300">L</span> = solenoid length in meters</div>
-                  <div><span className="text-cyan-300">n = N/L</span> = turns per meter</div>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Center field</div>
-                  <div className="mt-2 text-2xl font-semibold text-cyan-100">{fmt(centerB * 1000, 3)} mT</div>
-                  <div className="mt-1 text-sm text-slate-400">Numerical finite-coil sum at z = 0</div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Guide</div>
-                    <div className="mt-2 text-xl font-semibold text-amber-100">{fmt(idealB * 1000, 3)} mT</div>
-                    <div className="mt-1 text-sm text-slate-400">μ0 n I</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Center error</div>
-                    <div className="mt-2 text-xl font-semibold text-rose-100">{fmt(centerError, 1)}%</div>
-                    <div className="mt-1 text-sm text-slate-400">Finite coil vs guide</div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Turns per meter</div>
-                  <div className="mt-2 text-xl font-semibold text-slate-100">{fmt(turnsPerM, 2)} turns/m</div>
-                  <div className="mt-1 text-sm text-slate-400">Used by the long-solenoid approximation</div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
