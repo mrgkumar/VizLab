@@ -89,6 +89,11 @@ function finiteSolenoidAxisField(z, radiusM, lengthM, turns, currentA, currentDi
   return currentDir * (MU0 * n * currentA * 0.5) * (term1 - term2);
 }
 
+function longSolenoidAxisGuide(z, lengthM, turns, currentA, currentDir) {
+  const n = turns / lengthM;
+  return Math.abs(z) <= lengthM / 2 ? currentDir * MU0 * n * currentA : 0;
+}
+
 function makeCurvePath(points) {
   let d = "";
   let started = false;
@@ -131,11 +136,13 @@ export default function SolenoidVisualization() {
   const appRef = useRef(null);
   const [step, setStep] = useState(1);
   const [currentA, setCurrentA] = useState(6);
-  const [turns, setTurns] = useState(14);
+  const [turns, setTurns] = useState(5);
   const [lengthCm, setLengthCm] = useState(18);
   const [radiusCm, setRadiusCm] = useState(4);
   const [probeFrac, setProbeFrac] = useState(0);
+  const [coilTraceFrac, setCoilTraceFrac] = useState(0.35);
   const [currentDir, setCurrentDir] = useState(1);
+  const [showFieldLines, setShowFieldLines] = useState(false);
   const [showIdeal, setShowIdeal] = useState(true);
   const [labelScale, setLabelScale] = useState(1);
   const [fieldData, setFieldData] = useState({
@@ -169,11 +176,13 @@ export default function SolenoidVisualization() {
     const state = {
       step: 1,
       currentA: 6,
-      turns: 14,
+      turns: 5,
       lengthCm: 18,
       radiusCm: 4,
       probeFrac: 0,
+      coilTraceFrac: 0.35,
       currentDir: 1,
+      showFieldLines: false,
       showIdeal: true,
       labelScale: 1,
       theta: -0.8,
@@ -191,6 +200,9 @@ export default function SolenoidVisualization() {
       slice: new THREE.Group(),
       labels: new THREE.Group(),
       field: new THREE.Group(),
+      fieldLines: new THREE.Group(),
+      biot: new THREE.Group(),
+      traveller: new THREE.Group(),
       probe: new THREE.Group(),
       axes: new THREE.Group(),
       plot: new THREE.Group(),
@@ -199,6 +211,9 @@ export default function SolenoidVisualization() {
 
     const coilMaterial = new THREE.MeshStandardMaterial({
       color: 0x53a8ff,
+      transparent: true,
+      opacity: 0.58,
+      depthWrite: false,
       metalness: 0.15,
       roughness: 0.35,
       emissive: 0x0a1b35,
@@ -218,7 +233,34 @@ export default function SolenoidVisualization() {
     let sliceMesh = null;
     let sliceEdges = null;
     const fieldArrows = [];
+    const fieldLineObjects = [];
+    const fieldLineArrowheads = [];
     const currentMarkers = [];
+    const travellerMarker = new THREE.Group();
+    const travellerDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 24, 16),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0x7c2d12, emissiveIntensity: 0.75 })
+    );
+    const travellerArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 0.65, 0xfacc15, 0.18, 0.1);
+    const travellerPlane = new THREE.Mesh(
+      new THREE.CircleGeometry(0.78, 48),
+      new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+    );
+    const travellerPlaneEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.CircleGeometry(0.78, 48)),
+      new THREE.LineBasicMaterial({ color: 0xfde68a, transparent: true, opacity: 0.8 })
+    );
+    const biotLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineBasicMaterial({ color: 0x7dff7d, transparent: true, opacity: 0.78 })
+    );
+    const dlArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 0.9, 0xff4d4d, 0.22, 0.13);
+    const rArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, 0x7dff7d, 0.2, 0.12);
+    const dbArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, 0xff66ff, 0.24, 0.14);
+    const observationDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 24, 16),
+      new THREE.MeshStandardMaterial({ color: 0x7dff7d, emissive: 0x14532d, emissiveIntensity: 0.7 })
+    );
     const probeArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, 0xf59e0b, 0.18, 0.1);
     const centerArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1, 0x67e8f9, 0.24, 0.14);
     const axisCurve = new THREE.Line(
@@ -230,6 +272,9 @@ export default function SolenoidVisualization() {
       new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.9 })
     );
 
+    travellerMarker.add(travellerPlane, travellerPlaneEdges, travellerDot, travellerArrow);
+    groups.traveller.add(travellerMarker);
+    groups.biot.add(biotLine, dlArrow, rArrow, dbArrow, observationDot);
     groups.field.add(probeArrow, centerArrow);
     groups.plot.add(axisCurve, idealCurve);
 
@@ -240,7 +285,11 @@ export default function SolenoidVisualization() {
       coil: makeLabel("coil", "#93c5fd", 0.38),
       current: makeLabel("I", "#ff6b6b", 0.45),
       field: makeLabel("B", "#67e8f9", 0.45),
+      dl: makeLabel("dℓ", "#ff4d4d", 0.42),
+      r: makeLabel("r", "#7dff7d", 0.42),
+      db: makeLabel("dB = dℓ × r", "#ff88ff", 0.42),
       slice: makeLabel("slice plane", "#d8b4fe", 0.4),
+      traveller: makeLabel("wire tracker", "#fde68a", 0.38),
       probe: makeLabel("probe", "#fde68a", 0.38),
     };
     labels.z.position.set(0.2, 0.2, 10.0);
@@ -251,6 +300,10 @@ export default function SolenoidVisualization() {
     labels.field.position.set(0.25, 0.2, 0.85);
     labels.slice.position.set(0.45, -0.3, 0.8);
     labels.slice.visible = false;
+    labels.dl.visible = false;
+    labels.r.visible = false;
+    labels.db.visible = false;
+    labels.traveller.visible = false;
     labels.probe.position.set(0.25, 0.2, 0.35);
     Object.values(labels).forEach((sprite) => groups.labels.add(sprite));
 
@@ -316,6 +369,102 @@ export default function SolenoidVisualization() {
       }
       coilMesh = new THREE.Mesh(geometry, coilMaterial);
       groups.coil.add(coilMesh);
+
+      for (const line of fieldLineObjects) {
+        line.geometry.dispose();
+        line.material.dispose();
+        groups.fieldLines.remove(line);
+      }
+      fieldLineObjects.length = 0;
+      for (const arrow of fieldLineArrowheads) {
+        groups.fieldLines.remove(arrow);
+      }
+      fieldLineArrowheads.length = 0;
+      const fieldLinePlanes = state.step === 1 ? [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2] : [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+      for (const phi of fieldLinePlanes) {
+        const points = [];
+        const sampleCount = 120;
+        for (let i = 0; i <= sampleCount; i += 1) {
+          const t = (i / sampleCount) * TAU;
+          const zSpan = state.step === 1 ? radiusD * 2.4 : Math.max(lengthD * 0.72, radiusD * 2.4);
+          const insideRadius = state.step === 1 ? radiusD * 0.28 : radiusD * 0.38;
+          const returnRadius = state.step === 1 ? radiusD * 1.75 : radiusD * 1.62;
+          const radial = insideRadius + (returnRadius - insideRadius) * Math.pow((1 - Math.cos(t)) / 2, 0.82);
+          const z = zSpan * Math.sin(t);
+          points.push(new THREE.Vector3(radial * Math.cos(phi), radial * Math.sin(phi), z));
+        }
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.42 })
+        );
+        groups.fieldLines.add(line);
+        fieldLineObjects.push(line);
+        [0.2, 0.56, 0.82].forEach((u) => {
+          const index = Math.max(1, Math.min(points.length - 2, Math.round(u * (points.length - 1))));
+          const origin = points[index].clone();
+          const dir = points[index + state.currentDir].clone().sub(points[index]).normalize();
+          const arrow = new THREE.ArrowHelper(dir, origin, 0.42, 0x67e8f9, 0.13, 0.08);
+          groups.fieldLines.add(arrow);
+          fieldLineArrowheads.push(arrow);
+        });
+      }
+      groups.fieldLines.visible = state.showFieldLines;
+
+      const traceU = clamp(state.coilTraceFrac, 0, 1);
+      const traceT = traceU * (state.step === 1 ? TAU : state.turns * TAU);
+      const tracePoint = state.step === 1
+        ? new THREE.Vector3(radiusD * Math.cos(traceT), radiusD * Math.sin(traceT), 0)
+        : new THREE.Vector3(radiusD * Math.cos(traceT), radiusD * Math.sin(traceT), -lengthD / 2 + traceU * lengthD);
+      const traceTangent = state.step === 1
+        ? new THREE.Vector3(-Math.sin(traceT), Math.cos(traceT), 0)
+        : new THREE.Vector3(-Math.sin(traceT), Math.cos(traceT), lengthD / Math.max(state.turns * TAU, 1e-9)).normalize();
+      const traceDir = traceTangent.clone().multiplyScalar(state.currentDir).normalize();
+      travellerMarker.position.copy(tracePoint);
+      travellerDot.scale.setScalar(Math.max(0.72, wireRadius * 0.95));
+      travellerArrow.position.set(0, 0, 0);
+      travellerArrow.setDirection(traceDir);
+      travellerArrow.setLength(Math.max(0.62, wireRadius * 1.6), 0.18, 0.1);
+      travellerPlane.scale.setScalar(Math.max(1, wireRadius * 1.7));
+      travellerPlaneEdges.scale.copy(travellerPlane.scale);
+      groups.traveller.visible = true;
+      labels.traveller.position.copy(tracePoint.clone().add(new THREE.Vector3(0.45, 0.3, 0.45)));
+      labels.traveller.visible = true;
+
+      const observationPoint = new THREE.Vector3(
+        0,
+        0,
+        state.step === 1 ? 0 : clamp(state.probeFrac, -0.92, 0.92) * (lengthM / 2 + radiusM * 0.05) * DISPLAY_SCALE
+      );
+      const rVec = observationPoint.clone().sub(tracePoint);
+      const rLen = rVec.length();
+      const rHat = rLen > 1e-9 ? rVec.clone().normalize() : new THREE.Vector3(0, 0, 1);
+      const dbDir = traceDir.clone().cross(rHat);
+      if (dbDir.lengthSq() > 1e-10) dbDir.normalize();
+      // Match the circle visualization: the construction plane is perpendicular to r.
+      // For an ideal circular element dℓ lies exactly in this plane; helix pitch makes it nearly so.
+      const biotPlaneNormal = rHat;
+      const traceQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), biotPlaneNormal);
+      travellerPlane.quaternion.copy(traceQuat);
+      travellerPlaneEdges.quaternion.copy(traceQuat);
+      biotLine.geometry.setFromPoints([tracePoint, observationPoint]);
+      biotLine.geometry.computeBoundingSphere();
+      dlArrow.position.copy(tracePoint.clone().add(traceDir.clone().multiplyScalar(-0.45)));
+      dlArrow.setDirection(traceDir);
+      dlArrow.setLength(0.9, 0.22, 0.13);
+      rArrow.position.copy(tracePoint);
+      rArrow.setDirection(rHat);
+      rArrow.setLength(Math.max(0.55, rLen * 0.9), 0.2, 0.12);
+      dbArrow.position.copy(observationPoint);
+      dbArrow.setDirection(dbDir.lengthSq() > 0 ? dbDir : new THREE.Vector3(0, 0, 1));
+      dbArrow.setLength(1.05, 0.24, 0.14);
+      observationDot.position.copy(observationPoint);
+      groups.biot.visible = rLen > 0.18;
+      labels.dl.position.copy(tracePoint.clone().add(traceDir.clone().multiplyScalar(0.85)).add(new THREE.Vector3(0.1, 0.1, 0.2)));
+      labels.r.position.copy(tracePoint.clone().lerp(observationPoint, 0.55).add(new THREE.Vector3(0.12, 0.1, 0.16)));
+      labels.db.position.copy(observationPoint.clone().add((dbDir.lengthSq() > 0 ? dbDir : new THREE.Vector3(0, 0, 1)).multiplyScalar(1.25)));
+      labels.dl.visible = groups.biot.visible;
+      labels.r.visible = groups.biot.visible;
+      labels.db.visible = groups.biot.visible;
 
       const shellRadius = radiusD * 1.08;
       const shellLength = Math.max(lengthD, radiusD * 3);
@@ -470,7 +619,7 @@ export default function SolenoidVisualization() {
       for (let i = 0; i <= sampleCount; i += 1) {
         const z = zMin + ((zMax - zMin) * i) / sampleCount;
         const Bz = biotSavartFieldAtPoint(new THREE.Vector3(0, 0, z), physicalSegments, state.currentA, state.currentDir).z;
-        const idealBz = finiteSolenoidAxisField(z, radiusM, lengthM, state.turns, state.currentA, state.currentDir);
+        const idealBz = longSolenoidAxisGuide(z, lengthM, state.turns, state.currentA, state.currentDir);
         axisSamples.push({ z, Bz, idealBz });
         maxAxis = Math.max(maxAxis, Math.abs(Bz), Math.abs(idealBz));
       }
@@ -498,7 +647,7 @@ export default function SolenoidVisualization() {
       setFieldData({
         axis: axisSamples,
         centerB: biotSavartFieldAtPoint(new THREE.Vector3(0, 0, 0), physicalSegments, state.currentA, state.currentDir).z,
-        idealCenterB: finiteSolenoidAxisField(0, radiusM, lengthM, state.turns, state.currentA, state.currentDir),
+        idealCenterB: longSolenoidAxisGuide(0, lengthM, state.turns, state.currentA, state.currentDir),
         probeMag,
         maxAxis,
       });
@@ -542,9 +691,17 @@ export default function SolenoidVisualization() {
         state.probeFrac = v;
         rebuildCoil();
       },
+      setCoilTraceFrac(v) {
+        state.coilTraceFrac = v;
+        rebuildCoil();
+      },
       setCurrentDir(v) {
         state.currentDir = v;
         rebuildCoil();
+      },
+      setShowFieldLines(v) {
+        state.showFieldLines = v;
+        groups.fieldLines.visible = v;
       },
       setShowIdeal(v) {
         state.showIdeal = v;
@@ -562,11 +719,13 @@ export default function SolenoidVisualization() {
       reset() {
         state.step = 1;
         state.currentA = 6;
-        state.turns = 14;
+        state.turns = 5;
         state.lengthCm = 18;
         state.radiusCm = 4;
         state.probeFrac = 0;
+        state.coilTraceFrac = 0.35;
         state.currentDir = 1;
+        state.showFieldLines = false;
         state.showIdeal = true;
         state.labelScale = 1;
         setMessage("Step 1: one loop. The field is clearly tied to the current ring, not to a perfect uniform cylinder.");
@@ -667,7 +826,9 @@ export default function SolenoidVisualization() {
   useEffect(() => { appRef.current?.setLengthCm(lengthCm); }, [lengthCm]);
   useEffect(() => { appRef.current?.setRadiusCm(radiusCm); }, [radiusCm]);
   useEffect(() => { appRef.current?.setProbeFrac(probeFrac); }, [probeFrac]);
+  useEffect(() => { appRef.current?.setCoilTraceFrac(coilTraceFrac); }, [coilTraceFrac]);
   useEffect(() => { appRef.current?.setCurrentDir(currentDir); }, [currentDir]);
+  useEffect(() => { appRef.current?.setShowFieldLines(showFieldLines); }, [showFieldLines]);
   useEffect(() => { appRef.current?.setShowIdeal(showIdeal); }, [showIdeal]);
   useEffect(() => { appRef.current?.setLabelScale(labelScale); }, [labelScale]);
 
@@ -708,24 +869,28 @@ export default function SolenoidVisualization() {
   }[step];
 
   const stepHint = {
-    1: "A single current loop already creates a field. Notice that the loop itself is the source, not a uniform cylinder.",
-    2: "Many loops stacked together reinforce the axial field inside the winding and weaken the field outside. The moving slice plane marks the local cross-section.",
-    3: "A real solenoid is finite, so the field bends outward near the ends instead of staying perfectly uniform. Watch the slice plane move with the probe.",
-    4: "The dashed curve is the textbook long-solenoid estimate B ≈ μ0 n I. It is useful near the center, not at the ends.",
+    1: "A single current loop already creates a field. The selected wire element shows how dB comes from dℓ × r.",
+    2: "Many loops stacked together reinforce the axial field inside the winding. Move the yellow tracker to see each local dℓ × r contribution.",
+    3: "A real solenoid is finite, so the field bends outward near the ends instead of staying perfectly uniform. Move both the wire tracker and the axis probe.",
+    4: "The dashed curve is the textbook long-solenoid estimate B ≈ μ0 n I. It summarizes the many local dB contributions near the center.",
   }[step];
 
   const focus = {
-    1: "Follow the red current arrows on the wire and the cyan B arrow through the loop.",
-    2: "Look for the inside B arrows lining up while the red current arrows still trace the winding.",
-    3: "Watch the end fringing, the moving probe, and the weaker outside field.",
-    4: "Compare the finite-coil curve with the dashed μ0 n I guide and note where they differ.",
+    1: "Red dℓ is tangent to the wire, green r points to the observation point, and magenta dB is their cross product.",
+    2: "Look for many local dB directions adding into the stronger axial B field inside the coil.",
+    3: "Watch how changing the selected wire element or probe point changes r and therefore dB.",
+    4: "Compare the finite-coil curve with the dashed μ0 n I guide and remember it is the sum of many dB terms.",
   }[step];
 
   const legendItems = [
     { color: "bg-rose-400", title: "Red arrows", body: "Conventional current I flowing around the wire." },
     { color: "bg-cyan-300", title: "Cyan arrows", body: "Magnetic field B sampled at points in space." },
+    { color: "bg-cyan-400/70", title: "Cyan field lines", body: "Optional qualitative guide curves showing the closed-loop magnetic-field shape." },
+    { color: "bg-green-300", title: "Green r", body: "Vector from the selected current element to the observation point." },
+    { color: "bg-fuchsia-300", title: "Magenta dB", body: "Local field contribution dB in the dℓ × r direction." },
     { color: "bg-amber-300", title: "Orange arrow", body: "Field at the movable probe position." },
     { color: "bg-violet-300", title: "Violet plane", body: "Moving cross-section through the solenoid." },
+    { color: "bg-yellow-300", title: "Yellow plane", body: "Movable plane through the selected wire element, perpendicular to r." },
     { color: "bg-amber-400/80", title: "Amber dashed line", body: "Long-solenoid guide B ≈ μ0 n I." },
   ];
 
@@ -738,12 +903,15 @@ export default function SolenoidVisualization() {
   const modelAssumptions = [
     "This is a finite wire model, not an infinite ideal solenoid.",
     "The plot shows Bz on the solenoid axis, not the full 3D field everywhere.",
+    "The optional field lines are qualitative guide curves; the sampled arrows and plot come from the Biot-Savart calculation.",
     "Zero outside is only a limiting approximation; the real outside field is weaker, not zero.",
   ];
 
   const btn = (active) =>
-    `rounded-xl border px-3 py-2 text-sm transition ${
-      active ? "border-cyan-300 bg-cyan-500/25 text-cyan-50" : "border-white/15 bg-white/10 hover:bg-white/20"
+    `rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+      active
+        ? "border-cyan-200 bg-cyan-300 text-slate-950 shadow-sm shadow-cyan-300/20"
+        : "border-slate-500 bg-slate-800 text-slate-50 hover:border-cyan-200 hover:bg-slate-700"
     }`;
   const stepBtn = (active) =>
     `flex h-14 min-w-[3.75rem] items-center justify-center rounded-2xl border px-5 text-lg font-bold transition shadow-sm ${
@@ -760,11 +928,13 @@ export default function SolenoidVisualization() {
   const resetAll = () => {
     setStep(1);
     setCurrentA(6);
-    setTurns(14);
+    setTurns(5);
     setLengthCm(18);
     setRadiusCm(4);
     setProbeFrac(0);
+    setCoilTraceFrac(0.35);
     setCurrentDir(1);
+    setShowFieldLines(false);
     setShowIdeal(true);
     setLabelScale(1);
     appRef.current?.reset();
@@ -772,101 +942,158 @@ export default function SolenoidVisualization() {
 
   return (
     <div className="min-h-screen w-full bg-[radial-gradient(circle_at_20%_0%,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_78%_12%,rgba(217,70,239,0.12),transparent_28%),#020617] p-3 text-white sm:p-4">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <header className="flex flex-col gap-3 rounded-3xl border border-slate-700/80 bg-slate-950/75 p-4 shadow-2xl backdrop-blur md:flex-row md:items-end md:justify-between">
+      <div className="mx-auto w-full max-w-none space-y-2">
+        <header className="flex flex-col gap-3 rounded-3xl border border-slate-700/80 bg-slate-950/75 p-3 shadow-2xl backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="max-w-4xl">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">VizLab</div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">Solenoid Field Lab</h1>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Solenoid Field Lab</h1>
+            <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-300 sm:text-sm">
               A finite-coil Biot-Savart model with a long-solenoid comparison. The goal is to show why stacked loops create an almost uniform
               field inside and a weaker return field outside.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 p-3 text-center sm:min-w-[360px]">
+          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 p-2 text-center sm:min-w-[360px]">
             <div>
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400">B center</div>
-              <div className="mt-1 text-lg font-semibold text-cyan-100">{fmt(centerB * 1000, 3)} mT</div>
+              <div className="mt-1 text-base font-semibold text-cyan-100">{fmt(centerB * 1000, 3)} mT</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400">μ0 n I</div>
-              <div className="mt-1 text-lg font-semibold text-amber-100">{fmt(idealB * 1000, 3)} mT</div>
+              <div className="mt-1 text-base font-semibold text-amber-100">{fmt(idealB * 1000, 3)} mT</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Error</div>
-              <div className="mt-1 text-lg font-semibold text-rose-100">{fmt(centerError, 1)}%</div>
+              <div className="mt-1 text-base font-semibold text-rose-100">{fmt(centerError, 1)}%</div>
             </div>
           </div>
         </header>
 
-        <div className="relative overflow-hidden rounded-[2rem] border border-cyan-500/20 bg-black shadow-2xl" style={{ height: "min(78vh, 820px)", minHeight: "620px" }}>
-          <div ref={mountRef} className="absolute inset-0" />
+        <div className="grid gap-3 rounded-3xl border border-cyan-500/30 bg-slate-950 p-3 text-white shadow-2xl backdrop-blur xl:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)_auto_auto_auto] xl:items-end">
+          <div>
+            <label className="mb-1 flex justify-between text-sm font-bold text-yellow-100">
+              <span>Wire tracker on coil</span>
+              <span className="rounded-full bg-yellow-300 px-2 py-0.5 text-xs text-slate-950">{fmt(coilTraceFrac, 2)}</span>
+            </label>
+            <input
+              className="w-full accent-yellow-300"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={coilTraceFrac}
+              onChange={(e) => setCoilTraceFrac(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 flex justify-between text-sm font-bold text-cyan-100">
+              <span>Axis slice / probe position</span>
+              <span className="rounded-full bg-cyan-300 px-2 py-0.5 text-xs text-slate-950">{fmt(probeFrac, 2)}</span>
+            </label>
+            <input
+              className="w-full accent-cyan-400"
+              type="range"
+              min="-0.92"
+              max="0.92"
+              step="0.01"
+              value={probeFrac}
+              onChange={(e) => setProbeFrac(Number(e.target.value))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button className={btn(currentDir < 0)} onClick={() => setCurrentDir((v) => -v)}>
+              <ArrowRightLeft className="mr-2 inline h-4 w-4" />
+              Reverse
+            </button>
+            <button className={btn(false)} onClick={resetAll}>
+              <RotateCcw className="mr-2 inline h-4 w-4" />
+              Reset
+            </button>
+          </div>
+          <button className={btn(showFieldLines)} onClick={() => setShowFieldLines((v) => !v)}>
+            {showFieldLines ? "Hide field lines" : "Show field lines"}
+          </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button className={btn(false)} onClick={() => appRef.current?.view("default")}>Default</button>
+            <button className={btn(false)} onClick={() => appRef.current?.view("side")}>Side</button>
+            <button className={btn(false)} onClick={() => appRef.current?.view("end")}>End-on</button>
+          </div>
+        </div>
 
-          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between gap-4 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="pointer-events-auto max-w-lg rounded-3xl border border-white/10 bg-slate-950/78 p-4 shadow-2xl backdrop-blur-md">
-                <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Step {step}</div>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight">{stepTitle}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-200">{stepHint}</p>
-                <p className="mt-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-sm leading-6 text-cyan-50">
-                  Focus: {focus}
-                </p>
-                {message && <p className="mt-2 text-xs leading-5 text-slate-400">{message}</p>}
-              </div>
-
-              <div className="pointer-events-auto rounded-3xl border border-white/10 bg-slate-950/82 p-3 shadow-2xl backdrop-blur-md lg:w-[420px]">
-                <div className="flex flex-wrap gap-2">
-                  {[1, 2, 3, 4].map((s) => (
-                    <button key={s} className={stepBtn(step === s)} onClick={() => setStep(s)} aria-label={`Show step ${s}`}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <button className={btn(currentDir < 0)} onClick={() => setCurrentDir((v) => -v)}>
-                    <ArrowRightLeft className="mr-2 inline h-4 w-4" />
-                    Reverse current
+        <div className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="overflow-y-auto rounded-[2rem] border border-cyan-500/30 bg-[linear-gradient(180deg,#0f172a_0%,#020617_100%)] p-4 text-white shadow-2xl shadow-cyan-950/30 backdrop-blur" style={{ height: "calc(100vh - 245px)", minHeight: "560px" }}>
+            <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Lesson Steps</div>
+            <div className="mt-3 space-y-3">
+              {[1, 2, 3, 4].map((s) => {
+                const titles = {
+                  1: "One loop",
+                  2: "Stack loops",
+                  3: "Finite solenoid",
+                  4: "Compare model",
+                };
+                const summaries = {
+                  1: "Build dB from one selected wire element.",
+                  2: "See many local dB terms add inside.",
+                  3: "Move wire element and probe together.",
+                  4: "Compare finite field with μ0 n I.",
+                };
+                return (
+                  <button
+                    key={s}
+                    className={`w-full rounded-2xl border p-4 text-left transition ${
+                      step === s
+                        ? "border-cyan-100 bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-300/25"
+                        : "border-slate-600 bg-slate-900 text-slate-50 shadow-sm hover:border-cyan-300/70 hover:bg-slate-800"
+                    }`}
+                    onClick={() => setStep(s)}
+                    aria-label={`Show step ${s}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg font-bold ${
+                        step === s ? "bg-slate-950 text-cyan-200" : "bg-slate-800 text-cyan-200"
+                      }`}>
+                        {s}
+                      </span>
+                      <span>
+                        <span className="block text-base font-semibold">{titles[s]}</span>
+                        <span className={`mt-1 block text-xs leading-5 ${step === s ? "text-slate-800" : "text-slate-300"}`}>{summaries[s]}</span>
+                      </span>
+                    </div>
                   </button>
-                  <button className={btn(false)} onClick={resetAll}>
-                    <RotateCcw className="mr-2 inline h-4 w-4" />
-                    Reset
-                  </button>
-                </div>
-                <div className="mt-3">
-                  <label className="mb-1 flex justify-between text-sm font-medium text-cyan-100">
-                    <span>Slice / probe position</span>
-                    <span>{fmt(probeFrac, 2)}</span>
-                  </label>
-                  <input
-                    className="w-full accent-cyan-400"
-                    type="range"
-                    min="-0.92"
-                    max="0.92"
-                    step="0.01"
-                    value={probeFrac}
-                    onChange={(e) => setProbeFrac(Number(e.target.value))}
-                  />
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  <button className={btn(false)} onClick={() => appRef.current?.view("default")}>Default</button>
-                  <button className={btn(false)} onClick={() => appRef.current?.view("side")}>Side</button>
-                  <button className={btn(false)} onClick={() => appRef.current?.view("end")}>End-on</button>
-                </div>
-              </div>
+                );
+              })}
             </div>
 
-            <div className="pointer-events-auto grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl backdrop-blur-md">
-                <div className="flex flex-wrap gap-2">
-                  {compactLegendItems.map((item) => (
-                    <div key={item.title} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs text-slate-200">
-                      <span className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
-                      <span className="font-semibold text-slate-100">{item.title}</span>
+            <div className="mt-4 rounded-3xl border border-cyan-400/20 bg-slate-900 p-4 shadow-inner shadow-cyan-950/30">
+              <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Step {step}</div>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">{stepTitle}</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-100">{stepHint}</p>
+              <p className="mt-3 rounded-2xl border border-cyan-300/30 bg-cyan-300/15 p-3 text-sm leading-6 text-cyan-50">
+                Focus: {focus}
+              </p>
+              {message && <p className="mt-3 text-xs leading-5 text-slate-300">{message}</p>}
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-cyan-400/20 bg-slate-900 p-4 shadow-inner shadow-cyan-950/30">
+              <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Color Legend</div>
+              <div className="mt-3 grid gap-2">
+                {compactLegendItems.map((item) => (
+                  <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-slate-700 bg-slate-950 p-3 text-sm">
+                    <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${item.color}`} />
+                    <div>
+                      <div className="font-semibold text-slate-100">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-300">{item.body}</div>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 text-xs leading-5 text-slate-400">Drag to rotate. Shift+drag to pan. Scroll to zoom. Double-click to reset view.</div>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl backdrop-blur-md">
+            </div>
+          </aside>
+
+          <div className="relative overflow-hidden rounded-[2rem] border border-cyan-500/20 bg-black shadow-2xl" style={{ height: "calc(100vh - 245px)", minHeight: "560px" }}>
+            <div ref={mountRef} className="absolute inset-0" />
+
+            <div className="pointer-events-none absolute bottom-0 right-0 grid gap-3 p-4">
+              <div className="pointer-events-auto rounded-3xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl backdrop-blur-md">
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-2xl bg-slate-900 p-3">
                     <div className="uppercase tracking-[0.16em] text-slate-500">Turns</div>
@@ -881,6 +1108,9 @@ export default function SolenoidVisualization() {
                     <div className="mt-1 text-base font-semibold text-slate-100">{fmt(turnsPerM, 0)}/m</div>
                   </div>
                 </div>
+                <div className="mt-2 text-xs leading-5 text-yellow-100/80">Yellow plane rides on the wire and stays perpendicular to r, like the circle construction.</div>
+                <div className="mt-1 text-xs leading-5 text-fuchsia-100/80">Biot-Savart layer: red dℓ, green r, magenta dB = dℓ × r.</div>
+                <div className="mt-1 text-xs leading-5 text-slate-400">Drag to rotate. Shift+drag to pan. Scroll to zoom.</div>
               </div>
             </div>
           </div>
@@ -972,11 +1202,11 @@ export default function SolenoidVisualization() {
               <div className="mt-4 grid gap-3 text-sm leading-6 text-slate-300 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">1. Loop</div>
-                  <p className="mt-2">The red arrows show current I around the wire. That current generates the cyan B field.</p>
+                  <p className="mt-2">A selected wire element has tangent dℓ. The local field contribution follows dB = dℓ × r.</p>
                 </div>
                 <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">2. Stack</div>
-                  <p className="mt-2">Many loops add inside the coil, so the axial field grows more uniform near the center.</p>
+                  <p className="mt-2">Each turn contributes a small dB. Near the center, many contributions add along the axis.</p>
                 </div>
                 <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">3. Ends</div>
@@ -999,7 +1229,7 @@ export default function SolenoidVisualization() {
                   </div>
                   <div>
                     <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Turns</span><span>{turns}</span></label>
-                    <input className="w-full accent-cyan-400" type="range" min="4" max="28" step="1" value={turns} onChange={(e) => setTurns(Number(e.target.value))} />
+                    <input className="w-full accent-cyan-400" type="range" min="3" max="18" step="1" value={turns} onChange={(e) => setTurns(Number(e.target.value))} />
                   </div>
                   <div>
                     <label className="mb-1 flex justify-between text-sm text-slate-200"><span>Length</span><span>{lengthCm} cm</span></label>

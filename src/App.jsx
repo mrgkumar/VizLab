@@ -43,11 +43,11 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200/70 bg-white/70 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
+        <div className={active === "home" ? "mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8" : "mx-auto flex w-[98vw] max-w-none items-center justify-between gap-3 px-2 py-2"}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-700">VizLab</div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              <h1 className={active === "home" ? "mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl" : "mt-0 text-base font-semibold tracking-tight text-slate-950 sm:text-lg"}>
                 Interactive visual explanations for math, physics, and chemistry.
               </h1>
             </div>
@@ -56,13 +56,15 @@ export default function App() {
               Gallery
             </Button>
           </div>
-          <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            VizLab is built as a static GitHub Pages app. Each visualization is a self-contained React module that can be launched from the gallery.
-          </p>
+          {active === "home" && (
+            <p className="max-w-3xl text-sm leading-6 text-slate-600">
+              VizLab is built as a static GitHub Pages app. Each visualization is a self-contained React module that can be launched from the gallery.
+            </p>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className={active === "home" ? "mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8" : "mx-auto w-[98vw] max-w-none px-2 py-2"}>
         {active === "home" ? (
           <motion.section initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
             <div className="grid gap-4 md:grid-cols-2">
@@ -126,15 +128,15 @@ export default function App() {
             </section>
           </motion.section>
         ) : (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">{selected?.tag}</div>
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{selected?.title}</h2>
               </div>
               <Button variant="outline" onClick={() => setActive("home")}>Back to gallery</Button>
             </div>
-            <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-soft">
+            <div className="rounded-3xl border border-slate-200/80 bg-white shadow-soft">
               <Suspense
                 fallback={
                   <div className="flex min-h-[40vh] items-center justify-center px-6 py-16 text-sm text-slate-500">
