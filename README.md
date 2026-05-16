@@ -15,9 +15,9 @@ VizLab is a home for interactive web-based visualizations across math, physics, 
 
 ## GitHub Pages
 
-This project is set up as a Vite static site with a GitHub Actions workflow in [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) that publishes `dist/` to GitHub Pages.
+This project is set up for manual GitHub Pages deployment from the `gh-pages` branch.
 
-There is also a `deploy` script in `package.json` if you prefer the `gh-pages` branch workflow.
+Use `npm run build` to verify locally, then `npm run deploy` to publish `dist/` to GitHub Pages.
 
 If your repository name is not `VizLab`, update the `base` value in [vite.config.js](./vite.config.js) to match your GitHub Pages path.
 
@@ -26,4 +26,4 @@ If your repository name is not `VizLab`, update the `base` value in [vite.config
 1. Install dependencies with `npm install`.
 2. Start the app with `npm run dev`.
 3. Build for deployment with `npm run build`.
-4. Publish automatically through GitHub Actions, or run `npm run deploy` if you want the branch-based `gh-pages` flow.
+4. Publish with `npm run deploy` when you want to push the built site to GitHub Pages.
